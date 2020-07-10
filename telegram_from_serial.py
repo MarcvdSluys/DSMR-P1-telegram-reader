@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # Python script to retrieve and parse a DSMR telegram from a P1 port
 
 import re
@@ -85,7 +85,7 @@ while True:
             except Exception as ex:
                 template = "An exception of type {0} occured. Arguments:\n{1!r}"
                 message = template.format(type(ex).__name__, ex.args)
-                print message
+                print(message)
                 sys.exit("Fout bij het openen van %s. Programma afgebroken." % ser.name)
         else:
             telegram = ''
@@ -107,7 +107,7 @@ while True:
     except Exception as ex:
         template = "An exception of type {0} occured. Arguments:\n{1!r}"
         message = template.format(type(ex).__name__, ex.args)
-        print message
+        print(message)
         print("There was a problem %s, continuing...") % ex
     #Close serial port
     if production:
@@ -143,7 +143,7 @@ while True:
                 if debugging == 2:
                     print(telegram_line)
                 if debugging == 3:
-                    print re.split(b'(\()', telegram_line)
+                    print(re.split(b'(\()', telegram_line))
                 # You can't put a list in a dict TODO better solution
                 code = ''.join(re.split(b'(\()', telegram_line)[:1])
                 value = ''.join(re.split(b'(\()', telegram_line)[1:])
