@@ -53,7 +53,8 @@ def main():
     # Set the way the values are printed:
     # print_format = 'string'
     # print_format = 'code'
-    print_format = 'table'
+    # print_format = 'table'  # Table with header, date and time and all energies and powers
+    print_format = 'power'    # Time of day and net power (out - in)
     
     # The true telegram ends with an exclamation mark after a CR/LF
     pattern = re.compile('\r\n(?=!)')
@@ -227,8 +228,15 @@ def main():
                         clean_value(telegram_values['1-0:2.7.0'])*1000
                     ) )
                 
+            if(print_format == 'power'):
+                    print( "%8s,%6i" % (
+                        datetime.datetime.now().strftime('%H:%M:%S'),
+                        (clean_value(telegram_values['1-0:1.7.0']) - clean_value(telegram_values['1-0:2.7.0']))*1000
+                    ) )
+                
             # exit()
-            
+    # End of Infinite loop
+    
     
 def clean_value(value):
     """Remove non-numbers from values.
