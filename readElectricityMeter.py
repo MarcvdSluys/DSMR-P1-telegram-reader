@@ -298,11 +298,13 @@ def main():
                         clean_value(telegram_values['1-0:2.8.2']),
                         (clean_value(telegram_values['1-0:1.7.0']) - clean_value(telegram_values['1-0:2.7.0']))*1000
                     ) )
-                
+                    enFile.flush()
+                    
                 powFile.write( "%8s,%6i\n" % (
                     dt.datetime.now().strftime('%H:%M:%S'),
                     (clean_value(telegram_values['1-0:1.7.0']) - clean_value(telegram_values['1-0:2.7.0']))*1000
                 ) )
+                powFile.flush()
                 
             # exit()
         iIter += 1
