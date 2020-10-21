@@ -6,9 +6,13 @@ import sys
 import serial
 import crcmod.predefined
 import datetime
+import argparse
+import argcomplete
+# PYTHON_ARGCOMPLETE_OK
 
 
 def main():
+    # Default settings:
     dailyLine = False  # Print a log line every 10s
     # dailyLine = True   # Print a single daily line to be copied into the daily file manually
     
@@ -55,6 +59,8 @@ def main():
     # print_format = 'code'
     # print_format = 'table'  # Table with header, date and time and all energies and powers
     print_format = 'power'    # Time of day and net power (out - in)
+    maxIter = float('inf')   # Maximum number of iterations
+    # maxIter = 2               # Maximum number of iterations
     
     # The true telegram ends with an exclamation mark after a CR/LF
     pattern = re.compile('\r\n(?=!)')
@@ -64,6 +70,37 @@ def main():
     telegram = ''
     checksum_found = False
     good_checksum = False
+    
+    
+    # Command-line options:
+    
+    # Parse command-line arguments:
+    parser = argparse.ArgumentParser(description="Read data from an electricity meter via the P1 port.", 
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)  # Use capital, period, add default values
+    
+    # Optional arguments:
+    # parser.add_argument("-c", "--cron",      action="store_true", help="run in cron mode: save energies to a (yearly) file and 5 minutes of powers to a daily file")  # Default = False
+    
+    # Mutually exclusive:
+    Format  = parser.add_mutually_exclusive_group()
+    Format.add_argument("-c", "--cron",      action="store_true", help="run in cron mode: save energies to a (yearly) file and 5 minutes of powers to a daily file")  # Default = False
+    Format.add_argument("-p", "--power",     action="store_true", help="print time and power only every 10s")  # Default = False
+    Format.add_argument("-t", "--table",     action="store_true", help="print table with header, date, time, energies and powers every 10s")  # Default = False
+    
+    parser.add_argument("-i", "--iter",    type=int, default=6, help="number of (10s) iterations to monitor")
+    # parser.add_argument("-v", "--verbosity", action="count", default=0, help="increase output verbosity")  # Counts number of occurrences
+    # parser.add_argument("-t", "--twater",    type=float, default=50, help="water temperature in °C")
+    
+    argcomplete.autocomplete(parser)
+    args = parser.parse_args()
+    
+    # Use arguments:
+    if(args.power): print_format = 'power'  # Time of day and net power (out - in)
+    if(args.table): print_format = 'table'  # Table with header, date and time and all energies and powers
+    if(args.cron):  print_format = 'cron'   # Cron mode: save energies to a (yearly) file and 5 minutes of powers to a daily file
+    maxIter = args.iter
+    
+    
     
     
     if production:
@@ -89,10 +126,11 @@ def main():
         if(dailyLine):
             print( "%10s,%6s, %8s, %9s,%10s,%10s,%10s" % ('Date','Time','Heat','Ein1','Ein2','Eout1','Eout2'))
         else:
-            print( "%10s,%9s, %10s,%10s,%10s,%10s, %5s,%5s" % ('Date','Time','Ein1','Ein2','Eout1','Eout2','Pin','Pout'))
-            
-    # Infinite loop:
-    while True:
+            print( "%10s,%9s, %10s,%10s,%10s,%10s,%6s" % ('Date','Time','Ein1','Ein2','Eout1','Eout2','Pi-Po'))
+    
+    # (Infinite) loop:
+    iIter = 0
+    while(iIter<maxIter):
         try:
             # Read in all the lines until we find the checksum (line starting with an exclamation mark)
             if production:
@@ -135,7 +173,7 @@ def main():
                 ser.close()
             except Exception as ex:
                 sys.exit("An error occurred when closing the serial port %s: '%s'.  Aborting." % (ser.name, str(ex)))
-    
+        
         
         # We have a complete telegram, now we can process it.
         # Look for the checksum in the telegram
@@ -147,7 +185,7 @@ def main():
             calculated_checksum = crc16(telegram[:m.end() + 1])
             if given_checksum == calculated_checksum:
                 good_checksum = True
-    
+                
         good_checksum = True
         if(not good_checksum):
         # if(False):
@@ -200,7 +238,8 @@ def main():
                 else:
                     if(debugging > 2): print("Unknown code: %s." % code)
             
-            if(print_format == 'table'):
+            
+            if( (print_format == 'table') | ( (print_format == 'cron') & (iIter==0) ) ):
                 # print()
                 # print( "%10s,%9s, %10s,%10s,%10s,%10s, %5s,%5s" % ('Date','Time','Ein1','Ein2','Eout1','Eout2','Pin','Pout'))
                 
@@ -217,25 +256,25 @@ def main():
                     print()
                     exit()
                 else:  # Print log line every 10s:
-                    print( "%10s,%9s, %10.3f,%10.3f,%10.3f,%10.3f, %5i,%5i" % (
+                    print( "%10s,%9s, %10.3f,%10.3f,%10.3f,%10.3f,%6i" % (
                         datetime.date.today(),
                         datetime.datetime.now().strftime('%H:%M:%S'),
                         clean_value(telegram_values['1-0:1.8.1']),
                         clean_value(telegram_values['1-0:1.8.2']),
                         clean_value(telegram_values['1-0:2.8.1']),
                         clean_value(telegram_values['1-0:2.8.2']),
-                        clean_value(telegram_values['1-0:1.7.0'])*1000,
-                        clean_value(telegram_values['1-0:2.7.0'])*1000
-                    ) )
-                
-            if(print_format == 'power'):
-                    print( "%8s,%6i" % (
-                        datetime.datetime.now().strftime('%H:%M:%S'),
                         (clean_value(telegram_values['1-0:1.7.0']) - clean_value(telegram_values['1-0:2.7.0']))*1000
                     ) )
                 
+            if( (print_format == 'power') | (print_format == 'cron') ):
+                    print( "%8s,%6i" % (
+                        datetime.datetime.now().strftime('%H:%M:%S'),
+                        (clean_value(telegram_values['1-0:1.7.0']) - clean_value(telegram_values['1-0:2.7.0']))*1000
+                    ), flush=True)
+                
             # exit()
-    # End of Infinite loop
+        iIter += 1
+    # End of (infinite) loop
     
     
 def clean_value(value):
