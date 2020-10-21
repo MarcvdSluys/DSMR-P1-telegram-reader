@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 # Python script to retrieve and parse a DSMR telegram from a P1 port
 
+# PYTHON_ARGCOMPLETE_OK
+
 import re
 import sys
 import serial
 import crcmod.predefined
-import datetime
+import datetime as dt
 import argparse
 import argcomplete
-# PYTHON_ARGCOMPLETE_OK
+from pathlib import Path
 
 
 def main():
@@ -95,11 +97,24 @@ def main():
     args = parser.parse_args()
     
     # Use arguments:
+    maxIter = args.iter
     if(args.power): print_format = 'power'  # Time of day and net power (out - in)
     if(args.table): print_format = 'table'  # Table with header, date and time and all energies and powers
-    if(args.cron):  print_format = 'cron'   # Cron mode: save energies to a (yearly) file and 5 minutes of powers to a daily file
-    maxIter = args.iter
-    
+    if(args.cron):
+        print_format = 'cron'      # Cron mode: save energies to a (yearly) file and 5 minutes of powers to a daily file
+        maxIter = 29               # 5 minutes of 10s, -1 since update takes slightly more than 10s.
+        now = dt.datetime.now()    # Current system time
+        
+        # Find path on zotac or think:
+        home = str(Path.home())  # Without trailing slash
+        ElPath = home+'/data/Energy/ElectricityMeter/data/'  # zotac
+        # if not os.path.isdir(ElPath):
+        #     ElPath = '/home/sluys/diverse/popular/data/Weather/WeerPlaza/data/'  # think
+        dailyPowerFileName = now.strftime(ElPath+"power-%Y%0m%0d.csv")  # e.g. "powers-20200101.csv"; zero-padded month and day number
+        electricityFileName = ElPath+"electricity.csv"
+        powFile = open(dailyPowerFileName, mode='a')  # Open to append/write
+        enFile  = open(electricityFileName, mode='a')  # Open to append/write
+        
     
     
     
@@ -219,7 +234,7 @@ def main():
             # print(telegram_values)
             if(print_format == 'string' or print_format == 'code'):
                 print()
-                print(datetime.datetime.now())
+                print(dt.datetime.now())
             
             for code, value in sorted(telegram_values.items()):
                 if code in list_of_interesting_codes:
@@ -228,25 +243,25 @@ def main():
                     # Print nicely formatted string:
                     if print_format == 'string':
                         print_string = '{0:<'+str(max_len)+'}{1:>12}'
-                        if debugging > 0: print(datetime.datetime.utcnow())
+                        if debugging > 0: print(dt.datetime.utcnow())
                         print(print_string.format(list_of_interesting_codes[code], value))
                     elif(print_format == 'code'):
                         print_string = '{0:<10}{1:>12}'
-                        if debugging > 0: print(datetime.datetime.utcnow())
+                        if debugging > 0: print(dt.datetime.utcnow())
                         print(print_string.format(code, value))
                     
                 else:
                     if(debugging > 2): print("Unknown code: %s." % code)
             
             
-            if( (print_format == 'table') | ( (print_format == 'cron') & (iIter==0) ) ):
+            if(print_format == 'table'):
                 # print()
                 # print( "%10s,%9s, %10s,%10s,%10s,%10s, %5s,%5s" % ('Date','Time','Ein1','Ein2','Eout1','Eout2','Pin','Pout'))
                 
                 if(dailyLine):  # Print a sinle line with daily values
                     print( "%10s,%6s, %8s, %9.3f,%10.3f,%10.3f,%10.3f" % (
-                        datetime.date.today().strftime('%Y,%m,%d'),
-                        datetime.datetime.now().strftime('%H,%M'),
+                        dt.date.today().strftime('%Y,%m,%d'),
+                        dt.datetime.now().strftime('%H,%M'),
                         '253.851',
                         clean_value(telegram_values['1-0:1.8.1']),
                         clean_value(telegram_values['1-0:1.8.2']),
@@ -257,8 +272,8 @@ def main():
                     exit()
                 else:  # Print log line every 10s:
                     print( "%10s,%9s, %10.3f,%10.3f,%10.3f,%10.3f,%6i" % (
-                        datetime.date.today(),
-                        datetime.datetime.now().strftime('%H:%M:%S'),
+                        dt.date.today(),
+                        dt.datetime.now().strftime('%H:%M:%S'),
                         clean_value(telegram_values['1-0:1.8.1']),
                         clean_value(telegram_values['1-0:1.8.2']),
                         clean_value(telegram_values['1-0:2.8.1']),
@@ -266,16 +281,36 @@ def main():
                         (clean_value(telegram_values['1-0:1.7.0']) - clean_value(telegram_values['1-0:2.7.0']))*1000
                     ) )
                 
-            if( (print_format == 'power') | (print_format == 'cron') ):
-                    print( "%8s,%6i" % (
-                        datetime.datetime.now().strftime('%H:%M:%S'),
+            if(print_format == 'power'):
+                print( "%8s,%6i" % (
+                    dt.datetime.now().strftime('%H:%M:%S'),
+                    (clean_value(telegram_values['1-0:1.7.0']) - clean_value(telegram_values['1-0:2.7.0']))*1000
+                ) )
+                
+            if(print_format == 'cron'):
+                if(iIter==0):  # Save date, time, energies and net power:
+                    enFile.write( "%10s,%6s, %10.3f,%10.3f,%10.3f,%10.3f,%6i\n" % (
+                        dt.date.today(),
+                        dt.datetime.now().strftime('%H:%M'),
+                        clean_value(telegram_values['1-0:1.8.1']),
+                        clean_value(telegram_values['1-0:1.8.2']),
+                        clean_value(telegram_values['1-0:2.8.1']),
+                        clean_value(telegram_values['1-0:2.8.2']),
                         (clean_value(telegram_values['1-0:1.7.0']) - clean_value(telegram_values['1-0:2.7.0']))*1000
-                    ), flush=True)
+                    ) )
+                
+                powFile.write( "%8s,%6i\n" % (
+                    dt.datetime.now().strftime('%H:%M:%S'),
+                    (clean_value(telegram_values['1-0:1.7.0']) - clean_value(telegram_values['1-0:2.7.0']))*1000
+                ) )
                 
             # exit()
         iIter += 1
     # End of (infinite) loop
-    
+    if(args.cron):
+        powFile.close()
+        enFile.close()
+
     
 def clean_value(value):
     """Remove non-numbers from values.
