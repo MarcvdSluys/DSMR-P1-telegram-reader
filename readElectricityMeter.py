@@ -19,7 +19,6 @@ def main():
     # dailyLine = True   # Print a single daily line to be copied into the daily file manually
     
     # Debugging settings
-    production = True   # Use serial or file as input
     debugging = 0       # Show extra output (0-3)
     # DSMR interesting codes
     gas_meter = '1' 
@@ -118,21 +117,16 @@ def main():
     
     
     
-    if production:
-        # Serial port configuration:
-        ser = serial.Serial()
-        ser.baudrate = 9600              # DSMR 2.2: 9600;  DSMR 4.2/ESMR 5.0: 115200
-        ser.bytesize = serial.SEVENBITS  # DSMR 2.2/4.2: SEVENBITS;  ESMR 5.0: EIGHTBITS
-        ser.parity = serial.PARITY_EVEN  # ESMR 2.2/4.2: PARITY_EVEN;  ESMR 5.0: PARITY_NONE
-        ser.stopbits = serial.STOPBITS_ONE
-        ser.xonxoff = 1
-        ser.rtscts = 0
-        ser.timeout = 12
-        ser.port = "/dev/ttyUSB0"
-    else:
-        # Testing:
-        print("Running in test mode")
-        ser = open("raw.out", 'rb')
+    # Serial port configuration:
+    ser = serial.Serial()
+    ser.baudrate = 9600              # DSMR 2.2: 9600;  DSMR 4.2/ESMR 5.0: 115200
+    ser.bytesize = serial.SEVENBITS  # DSMR 2.2/4.2: SEVENBITS;  ESMR 5.0: EIGHTBITS
+    ser.parity = serial.PARITY_EVEN  # ESMR 2.2/4.2: PARITY_EVEN;  ESMR 5.0: PARITY_NONE
+    ser.stopbits = serial.STOPBITS_ONE
+    ser.xonxoff = 1                  # Unclear whether/why this is needed
+    ser.rtscts = 0
+    ser.timeout = 12                 # 12s for DSMR 4, 2s for DSMR 5
+    ser.port = "/dev/ttyUSB0"
     
     
     # Print table header:
@@ -148,20 +142,16 @@ def main():
     while(iIter<maxIter):
         try:
             # Read in all the lines until we find the checksum (line starting with an exclamation mark)
-            if production:
-                # Open serial port:
-                try:
-                    ser.open()
-                    telegram = ''
-                    checksum_found = False
-                except Exception as ex:
-                    template = "An exception of type {0} occured. Arguments:\n{1!r}"
-                    message = template.format(type(ex).__name__, ex.args)
-                    print(message)
-                    sys.exit("Error when opening %s. Aborting." % ser.name)
-            else:
-                telegram = ''
-                checksum_found = False
+            # Open serial port:
+            try:
+                ser.open()
+                telegram = ''           # Clear telegram string
+                checksum_found = False  # Reset checksum
+            except Exception as ex:
+                template = "An exception of type {0} occured. Arguments:\n{1!r}"
+                message = template.format(type(ex).__name__, ex.args)
+                print(message)
+                sys.exit("Error when opening %s. Aborting." % ser.name)
             
             while not checksum_found:
                 # Read in a line:
@@ -183,11 +173,10 @@ def main():
             print("There was a problem:  '%s', continuing..." % ex)
             
         # Close serial port:
-        if production:
-            try:
-                ser.close()
-            except Exception as ex:
-                sys.exit("An error occurred when closing the serial port %s: '%s'.  Aborting." % (ser.name, str(ex)))
+        try:
+            ser.close()
+        except Exception as ex:
+            sys.exit("An error occurred when closing the serial port %s: '%s'.  Aborting." % (ser.name, str(ex)))
         
         
         # We have a complete telegram, now we can process it.
